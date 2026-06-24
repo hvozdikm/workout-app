@@ -6,11 +6,13 @@ export const WORKOUT_STEP_MODES = ['time', 'repetitions'] as const
 
 export type WorkoutStepMode = (typeof WORKOUT_STEP_MODES)[number]
 
-export type WorkoutPlanSource = 'quick-timer' | 'predefined' | 'custom'
+export type WorkoutPlanSource = 'quick-timer' | 'manual'
 
 export interface WorkoutStep {
   id: string
+  exerciseId: string
   name: string
+  bodyPart: BodyPart
   seriesCount: number
   mode: WorkoutStepMode
   targetValue: number
@@ -19,12 +21,18 @@ export interface WorkoutStep {
 
 export interface WorkoutPlan {
   id: string
-  bodyPart: BodyPart
   title: string
   source: WorkoutPlanSource
   steps: WorkoutStep[]
   quickTimerSeriesCount?: number
   quickTimerTargetDurationSeconds?: number
+}
+
+export interface WorkoutBodyPartOverview {
+  bodyPart: BodyPart
+  exerciseCount: number
+  totalSeriesCount: number
+  estimatedTotalSeconds: number
 }
 
 export interface ExerciseDefinition {

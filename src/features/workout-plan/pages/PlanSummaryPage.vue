@@ -9,15 +9,33 @@
       <ion-card v-if="planStore.plan">
         <ion-card-header>
           <ion-card-title>{{ planStore.plan.title }}</ion-card-title>
-          <ion-card-subtitle>{{ sourceLabel }} · {{ planStore.plan.bodyPart }}</ion-card-subtitle>
+          <ion-card-subtitle>{{ sourceLabel }}<template v-if="bodyPartsLabel"> · {{ bodyPartsLabel }}</template></ion-card-subtitle>
         </ion-card-header>
         <ion-card-content class="summary-card">
-          <ion-list inset>
+          <template v-if="planStore.plan.source === 'manual'">
+            <ion-list inset>
+              <ion-item v-for="summary in planStore.planOverview" :key="summary.bodyPart">
+                <ion-label>
+                  <h3>{{ summary.bodyPart }}</h3>
+                  <p>{{ summary.exerciseCount }} exercises · {{ summary.totalSeriesCount }} series</p>
+                </ion-label>
+              </ion-item>
+            </ion-list>
+            <p class="summary-total">Estimated total time: {{ estimatedTotalClock }}</p>
+            <ion-list inset>
+              <ion-item v-for="(step, index) in planStore.plan.steps" :key="step.id">
+                <ion-label>
+                  <h3>{{ index + 1 }}. {{ step.name }}</h3>
+                  <p>{{ step.bodyPart }} · {{ formatStepSummary(step) }}</p>
+                </ion-label>
+              </ion-item>
+            </ion-list>
+          </template>
+          <ion-list v-else inset>
             <ion-item v-for="(step, index) in planStore.plan.steps" :key="step.id">
               <ion-label>
                 <h3>{{ index + 1 }}. {{ step.name }}</h3>
                 <p>{{ formatStepSummary(step) }}</p>
-                <p v-if="index < planStore.plan.steps.length - 1">Next: {{ planStore.plan.steps[index + 1].name }}</p>
               </ion-label>
             </ion-item>
           </ion-list>
@@ -54,19 +72,22 @@ import {
 } from '@ionic/vue'
 import { computed } from 'vue'
 
+import { formatSeconds } from '../../../core/timer/countdown'
 import { formatStepSummary } from '../../../core/workout/step-utils'
 import { useWorkoutPlanStore } from '../store'
 
 const planStore = useWorkoutPlanStore()
+const estimatedTotalClock = computed(() => formatSeconds(planStore.estimatedTotalSeconds))
+const bodyPartsLabel = computed(() => planStore.planOverview.map((summary) => summary.bodyPart).join(' + '))
 
 const sourceLabel = computed(() => {
   switch (planStore.plan?.source) {
     case 'quick-timer':
       return 'Quick timer'
-    case 'custom':
-      return 'Custom plan'
+    case 'manual':
+      return 'Manual plan'
     default:
-      return 'Predefined plan'
+      return ''
   }
 })
 </script>
@@ -75,5 +96,10 @@ const sourceLabel = computed(() => {
 .summary-card {
   display: grid;
   gap: 1rem;
+}
+
+.summary-total {
+  margin: 0;
+  font-weight: 600;
 }
 </style>

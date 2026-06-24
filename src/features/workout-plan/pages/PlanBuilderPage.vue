@@ -8,10 +8,10 @@
     <ion-content class="ion-padding">
       <ion-card>
         <ion-card-header>
-          <ion-card-title>Build for {{ selectedBodyPart }}</ion-card-title>
-          <ion-card-subtitle>Choose a predefined plan or create your own from the exercise list.</ion-card-subtitle>
+          <ion-card-title>Build your workout</ion-card-title>
+          <ion-card-subtitle>Pick a body part, add exercises manually, then preview the selected exercises and total time.</ion-card-subtitle>
         </ion-card-header>
-        <ion-card-content class="planner-top">
+        <ion-card-content>
           <ion-item>
             <ion-label position="stacked">Body part</ion-label>
             <ion-select v-model="selectedBodyPart" interface="popover">
@@ -20,112 +20,89 @@
               </ion-select-option>
             </ion-select>
           </ion-item>
-          <ion-segment v-model="plannerMode">
-            <ion-segment-button value="predefined">
-              <ion-label>Predefined</ion-label>
-            </ion-segment-button>
-            <ion-segment-button value="custom">
-              <ion-label>Build your own</ion-label>
-            </ion-segment-button>
-          </ion-segment>
         </ion-card-content>
       </ion-card>
 
-      <ion-card v-if="planStore.hasPlan && planStore.plan?.source !== 'quick-timer'">
+      <ion-card>
         <ion-card-header>
-          <ion-card-title>Current selection</ion-card-title>
-          <ion-card-subtitle>{{ planStore.plan?.title }}</ion-card-subtitle>
+          <ion-card-title>{{ selectedBodyPart }} exercises</ion-card-title>
+          <ion-card-subtitle>Added exercises move to the top and can only be selected once.</ion-card-subtitle>
         </ion-card-header>
         <ion-card-content>
-          <ion-button expand="block" fill="outline" :disabled="!planStore.canReviewPlan" @click="reviewCurrentPlan">
-            Review Current Plan
+          <ion-list inset>
+            <ion-item
+              v-for="exercise in orderedExercises"
+              :key="exercise.id"
+              :class="{ 'exercise-item--selected': isExerciseSelected(exercise.id) }"
+            >
+              <ion-label>
+                <h3>{{ exercise.name }}</h3>
+                <p>
+                  Default: {{ exercise.defaultMode === 'time' ? `${exercise.defaultTargetValue} sec` : `${exercise.defaultTargetValue} reps` }}
+                  <span v-if="isExerciseSelected(exercise.id)"> · Added</span>
+                </p>
+              </ion-label>
+              <ion-button
+                slot="end"
+                fill="outline"
+                :color="isExerciseSelected(exercise.id) ? 'danger' : undefined"
+                @click="toggleExerciseSelection(exercise.id)"
+              >
+                {{ isExerciseSelected(exercise.id) ? 'Remove' : 'Add' }}
+              </ion-button>
+            </ion-item>
+          </ion-list>
+        </ion-card-content>
+      </ion-card>
+
+      <ion-card>
+        <ion-card-header>
+          <ion-card-title>Selected exercises</ion-card-title>
+          <ion-card-subtitle>Adjust the time or reps and the number of series for each exercise. Estimated total: {{ estimatedTotalClock }}</ion-card-subtitle>
+        </ion-card-header>
+        <ion-card-content>
+          <p v-if="!planStore.canReviewPlan" class="secondary-copy">No exercises added yet.</p>
+          <div v-for="step in planStore.plan?.steps ?? []" :key="step.id" class="custom-step">
+            <div class="custom-step__header">
+              <div>
+                <strong>{{ step.name }}</strong>
+                <p class="secondary-copy">{{ step.bodyPart }} · {{ step.restSeconds }}s rest</p>
+              </div>
+              <ion-button color="danger" fill="clear" size="small" @click="planStore.removeStep(step.id)">Remove</ion-button>
+            </div>
+            <ion-segment :value="step.mode" @ionChange="planStore.setStepMode(step.id, $event.detail.value as 'time' | 'repetitions')">
+              <ion-segment-button value="time">
+                <ion-label>Time</ion-label>
+              </ion-segment-button>
+              <ion-segment-button value="repetitions">
+                <ion-label>Reps</ion-label>
+              </ion-segment-button>
+            </ion-segment>
+            <div class="stepper-row">
+              <span>{{ step.mode === 'time' ? 'Time' : 'Repetitions' }}</span>
+              <div class="stepper-control">
+                <ion-button fill="outline" size="small" @click="planStore.updateStepTarget(step.id, -1)">-</ion-button>
+                <span>{{ formatStepTarget(step) }}</span>
+                <ion-button fill="outline" size="small" @click="planStore.updateStepTarget(step.id, 1)">+</ion-button>
+              </div>
+            </div>
+            <div class="stepper-row">
+              <span>Series</span>
+              <div class="stepper-control">
+                <ion-button fill="outline" size="small" @click="planStore.updateSeriesCount(step.id, -1)">-</ion-button>
+                <span>{{ step.seriesCount }}</span>
+                <ion-button fill="outline" size="small" @click="planStore.updateSeriesCount(step.id, 1)">+</ion-button>
+              </div>
+            </div>
+          </div>
+          <ion-button expand="block" :disabled="!planStore.canReviewPlan" @click="reviewCurrentPlan">
+            Preview Workout
+          </ion-button>
+          <ion-button v-if="planStore.canReviewPlan" expand="block" fill="outline" color="medium" @click="planStore.createManualWorkout()">
+            Clear Plan
           </ion-button>
         </ion-card-content>
       </ion-card>
-
-      <template v-if="plannerMode === 'predefined'">
-        <ion-card v-for="predefinedPlan in planStore.availablePlans" :key="predefinedPlan.id">
-          <ion-card-header>
-            <ion-card-title>{{ predefinedPlan.title }}</ion-card-title>
-            <ion-card-subtitle>{{ predefinedPlan.steps.length }} exercises</ion-card-subtitle>
-          </ion-card-header>
-          <ion-card-content class="plan-card">
-            <ion-list inset>
-              <ion-item v-for="step in predefinedPlan.steps" :key="step.id">
-                <ion-label>
-                  <h3>{{ step.name }}</h3>
-                  <p>{{ formatStepSummary(step) }}</p>
-                </ion-label>
-              </ion-item>
-            </ion-list>
-            <ion-button expand="block" @click="reviewPredefinedPlan(predefinedPlan.id)">Review Plan</ion-button>
-          </ion-card-content>
-        </ion-card>
-      </template>
-
-      <template v-else>
-        <ion-card>
-          <ion-card-header>
-            <ion-card-title>Exercise list</ion-card-title>
-            <ion-card-subtitle>Add exercises to your own plan.</ion-card-subtitle>
-          </ion-card-header>
-          <ion-card-content>
-            <ion-list inset>
-              <ion-item v-for="exercise in planStore.availableExercises" :key="exercise.id">
-                <ion-label>
-                  <h3>{{ exercise.name }}</h3>
-                  <p>Default: {{ exercise.defaultMode === 'time' ? `${exercise.defaultTargetValue} sec` : `${exercise.defaultTargetValue} reps` }}</p>
-                </ion-label>
-                <ion-button slot="end" fill="outline" @click="planStore.addExerciseToPlan(exercise.id)">Add</ion-button>
-              </ion-item>
-            </ion-list>
-          </ion-card-content>
-        </ion-card>
-
-        <ion-card>
-          <ion-card-header>
-            <ion-card-title>{{ planStore.plan?.title ?? `Custom ${selectedBodyPart} Plan` }}</ion-card-title>
-            <ion-card-subtitle>Set series, choose time or reps, then review the plan.</ion-card-subtitle>
-          </ion-card-header>
-          <ion-card-content>
-            <p v-if="!planStore.canReviewPlan" class="empty-message">No exercises added yet.</p>
-            <div v-for="step in planStore.plan?.steps ?? []" :key="step.id" class="custom-step">
-              <div class="custom-step__header">
-                <strong>{{ step.name }}</strong>
-                <ion-button color="danger" fill="clear" size="small" @click="planStore.removeStep(step.id)">Remove</ion-button>
-              </div>
-              <ion-segment :value="step.mode" @ionChange="planStore.setStepMode(step.id, $event.detail.value as 'time' | 'repetitions')">
-                <ion-segment-button value="time">
-                  <ion-label>Time</ion-label>
-                </ion-segment-button>
-                <ion-segment-button value="repetitions">
-                  <ion-label>Reps</ion-label>
-                </ion-segment-button>
-              </ion-segment>
-              <div class="stepper-row">
-                <span>Target</span>
-                <div class="stepper-control">
-                  <ion-button fill="outline" size="small" @click="planStore.updateStepTarget(step.id, -1)">-</ion-button>
-                  <span>{{ formatStepTarget(step) }}</span>
-                  <ion-button fill="outline" size="small" @click="planStore.updateStepTarget(step.id, 1)">+</ion-button>
-                </div>
-              </div>
-              <div class="stepper-row">
-                <span>Series</span>
-                <div class="stepper-control">
-                  <ion-button fill="outline" size="small" @click="planStore.updateSeriesCount(step.id, -1)">-</ion-button>
-                  <span>{{ step.seriesCount }}</span>
-                  <ion-button fill="outline" size="small" @click="planStore.updateSeriesCount(step.id, 1)">+</ion-button>
-                </div>
-              </div>
-              <p class="rest-copy">Rest: {{ step.restSeconds }} sec</p>
-            </div>
-            <ion-button expand="block" :disabled="!planStore.canReviewPlan" @click="reviewCustomPlan">
-              Review Custom Plan
-            </ion-button>
-          </ion-card-content>
-        </ion-card>
-      </template>
     </ion-content>
   </ion-page>
 </template>
@@ -153,54 +130,68 @@ import {
   onIonViewWillEnter,
   useIonRouter,
 } from '@ionic/vue'
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 
-import { BODY_PART_OPTIONS, type BodyPart } from '../../../core/types/workout'
-import { formatStepSummary, formatStepTarget } from '../../../core/workout/step-utils'
+import { formatSeconds } from '../../../core/timer/countdown'
+import { BODY_PART_OPTIONS, type BodyPart, type ExerciseDefinition } from '../../../core/types/workout'
+import { formatStepTarget } from '../../../core/workout/step-utils'
 import { useWorkoutPlanStore } from '../store'
 
 const router = useIonRouter()
 const planStore = useWorkoutPlanStore()
 const bodyPartOptions = BODY_PART_OPTIONS
 const selectedBodyPart = ref<BodyPart>(planStore.selectedBodyPart)
-const plannerMode = ref<'predefined' | 'custom'>('predefined')
+const estimatedTotalClock = computed(() => formatSeconds(planStore.estimatedTotalSeconds))
+const orderedExercises = computed<ExerciseDefinition[]>(() => {
+  const selectedExercises: ExerciseDefinition[] = []
+  const unselectedExercises: ExerciseDefinition[] = []
+
+  for (const exercise of planStore.availableExercises) {
+    if (planStore.isExerciseSelected(exercise.id)) {
+      selectedExercises.push(exercise)
+      continue
+    }
+
+    unselectedExercises.push(exercise)
+  }
+
+  return [...selectedExercises, ...unselectedExercises]
+})
 
 watch(selectedBodyPart, async (bodyPart) => {
   await planStore.loadPlannerData(bodyPart)
-  if (plannerMode.value === 'custom') {
-    planStore.createCustomWorkout()
-  }
-})
-
-watch(plannerMode, (mode) => {
-  if (mode === 'custom') {
-    planStore.createCustomWorkout()
-  }
 })
 
 onIonViewWillEnter(async () => {
   await planStore.loadPlannerData(selectedBodyPart.value)
+  planStore.prepareManualWorkout()
 })
-
-function reviewPredefinedPlan(planId: string): void {
-  planStore.selectPredefinedPlan(planId)
-  router.push('/tabs/summary')
-}
-
-function reviewCustomPlan(): void {
-  router.push('/tabs/summary')
-}
 
 function reviewCurrentPlan(): void {
   router.push('/tabs/summary')
 }
+
+function isExerciseSelected(exerciseId: string): boolean {
+  return planStore.isExerciseSelected(exerciseId)
+}
+
+function toggleExerciseSelection(exerciseId: string): void {
+  if (planStore.isExerciseSelected(exerciseId)) {
+    planStore.removeExerciseFromPlan(exerciseId)
+    return
+  }
+
+  planStore.addExerciseToPlan(exerciseId)
+}
 </script>
 
 <style scoped>
-.planner-top,
-.plan-card {
-  display: grid;
-  gap: 1rem;
+.exercise-item--selected {
+  --background: color-mix(in srgb, var(--ion-color-success) 10%, transparent);
+}
+
+.exercise-item--selected ion-label h3 {
+  color: var(--ion-color-success-shade);
 }
 
 .custom-step {
@@ -231,8 +222,7 @@ function reviewCurrentPlan(): void {
   gap: 0.5rem;
 }
 
-.rest-copy,
-.empty-message {
+.secondary-copy {
   margin: 0;
   color: var(--ion-color-medium);
 }

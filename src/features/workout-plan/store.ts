@@ -1,59 +1,72 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 
-import { clampTargetValue, getDefaultTargetValue, getTargetStepSize } from '../../core/workout/step-utils'
+import {
+  clampTargetValue,
+  getDefaultTargetValue,
+  getPlanEstimatedTotalSeconds,
+  getPlanOverview,
+  getTargetStepSize,
+} from '../../core/workout/step-utils'
 import type { BodyPart, ExerciseDefinition, WorkoutPlan, WorkoutStepMode } from '../../core/types/workout'
 import {
-  createCustomPlan,
-  createCustomStep,
+  createManualPlan,
+  createManualStep,
   createQuickTimerPlan,
-  fetchPlansByBodyPart,
   getExerciseCatalog,
 } from './service'
 
 export const useWorkoutPlanStore = defineStore('workout-plan', () => {
   const plan = ref<WorkoutPlan | null>(null)
-  const availablePlans = ref<WorkoutPlan[]>([])
   const availableExercises = ref<ExerciseDefinition[]>([])
   const isLoading = ref(false)
   const selectedBodyPart = ref<BodyPart>('Chest')
 
   const hasPlan = computed(() => plan.value !== null)
   const canReviewPlan = computed(() => (plan.value?.steps.length ?? 0) > 0)
+  const planOverview = computed(() => (plan.value ? getPlanOverview(plan.value) : []))
+  const estimatedTotalSeconds = computed(() => (plan.value ? getPlanEstimatedTotalSeconds(plan.value) : 0))
+  const selectedExerciseIds = computed(() => new Set(plan.value?.steps.map((step) => step.exerciseId) ?? []))
 
   async function loadPlannerData(bodyPart: BodyPart): Promise<void> {
     isLoading.value = true
     selectedBodyPart.value = bodyPart
-    availablePlans.value = await fetchPlansByBodyPart(bodyPart)
     availableExercises.value = getExerciseCatalog(bodyPart)
     isLoading.value = false
   }
 
-  function ensureCustomPlan(): void {
-    if (!plan.value || plan.value.source !== 'custom' || plan.value.bodyPart !== selectedBodyPart.value) {
-      plan.value = createCustomPlan(selectedBodyPart.value)
+  function ensureManualPlan(): void {
+    if (!plan.value || plan.value.source !== 'manual') {
+      plan.value = createManualPlan()
     }
   }
 
-  function selectPredefinedPlan(planId: string): void {
-    const selectedPlan = availablePlans.value.find((candidate) => candidate.id === planId)
-    if (!selectedPlan) {
-      return
-    }
-
-    plan.value = {
-      ...selectedPlan,
-      steps: selectedPlan.steps.map((step) => ({ ...step })),
-    }
+  function prepareManualWorkout(): void {
+    ensureManualPlan()
   }
 
-  function createCustomWorkout(): void {
-    plan.value = createCustomPlan(selectedBodyPart.value)
+  function createManualWorkout(): void {
+    plan.value = createManualPlan()
   }
 
   function addExerciseToPlan(exerciseId: string): void {
-    ensureCustomPlan()
-    plan.value?.steps.push(createCustomStep(selectedBodyPart.value, exerciseId))
+    ensureManualPlan()
+    if (selectedExerciseIds.value.has(exerciseId)) {
+      return
+    }
+    plan.value?.steps.push(createManualStep(selectedBodyPart.value, exerciseId))
+  }
+
+  function isExerciseSelected(exerciseId: string): boolean {
+    return selectedExerciseIds.value.has(exerciseId)
+  }
+
+  function removeExerciseFromPlan(exerciseId: string): void {
+    if (!plan.value) {
+      return
+    }
+
+    plan.value.steps = plan.value.steps.filter((step) => step.exerciseId !== exerciseId)
   }
 
   function removeStep(stepId: string): void {
@@ -122,16 +135,20 @@ export const useWorkoutPlanStore = defineStore('workout-plan', () => {
 
   return {
     plan,
-    availablePlans,
     availableExercises,
     isLoading,
     selectedBodyPart,
     hasPlan,
     canReviewPlan,
+    planOverview,
+    estimatedTotalSeconds,
+    selectedExerciseIds,
     loadPlannerData,
-    selectPredefinedPlan,
-    createCustomWorkout,
+    prepareManualWorkout,
+    createManualWorkout,
     addExerciseToPlan,
+    isExerciseSelected,
+    removeExerciseFromPlan,
     removeStep,
     updateSeriesCount,
     setStepMode,

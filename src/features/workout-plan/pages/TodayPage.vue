@@ -114,9 +114,9 @@
 
       <ion-card>
         <ion-card-header>
-          <ion-card-title>Pick or create a plan</ion-card-title>
+          <ion-card-title>Build a workout plan</ion-card-title>
           <ion-card-subtitle>
-            Choose a predefined plan or build your own from a body-part exercise list.
+            Pick body parts, add exercises manually, and preview the overview before you start.
           </ion-card-subtitle>
         </ion-card-header>
         <ion-card-content>
@@ -183,6 +183,7 @@ onIonViewWillEnter(async () => {
 
 async function openPlanner(): Promise<void> {
   await planStore.loadPlannerData(planStore.selectedBodyPart)
+  planStore.prepareManualWorkout()
   router.push('/tabs/planner')
 }
 
